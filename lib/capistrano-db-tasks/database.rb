@@ -31,7 +31,11 @@ module Database
     end
 
     def output_file
-      @output_file ||= "db/#{database}_#{current_time}.sql.bz2"
+      @output_file ||= "db/#{output_filename}"
+    end
+
+    def output_filename
+      @output_filename ||= "#{database}_#{current_time}.sql.bz2"
     end
 
     def db_environment
@@ -73,7 +77,7 @@ module Database
     end
 
     def dump
-      @cap.run "cd #{@cap.current_path} && #{dump_cmd} | bzip2 - - > #{output_file}"
+      @cap.run "cd #{@cap.current_path} && mkdir -p #{Pathname.new(output_file).dirname} && #{dump_cmd} | bzip2 - - > #{output_file}"
       self
     end
 
@@ -114,7 +118,7 @@ module Database
     end
 
     def dump
-      system "#{dump_cmd} | bzip2 - - > #{output_file}"
+      system "mkdir -p #{Pathname.new(output_file).dirname} && #{dump_cmd} | bzip2 - - > #{output_file}"
       self
     end
 

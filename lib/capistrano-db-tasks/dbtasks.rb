@@ -41,6 +41,15 @@ if Capistrano::Configuration.instance(false)
       task :push do
         db.remote.sync
       end
+
+      desc 'Backup the remote database, use -spath=some/path to set the backup directory'
+      task :backup, :roles => :db do
+        path = fetch(:path, 'shared/backups')
+        remote = Database::Remote.new(instance)
+        remote.output_file = Pathname.new(current_path).join(path, remote.output_filename)
+        puts "Backing up database to #{remote.output_file}"
+        remote.dump
+      end
     end
 
     namespace :assets do
