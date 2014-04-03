@@ -34,6 +34,10 @@ module Database
       @output_file ||= "db/#{output_filename}"
     end
 
+    def output_file= attr
+      @output_file = "db/#{attr}"
+    end
+
     def output_filename
       @output_filename ||= "#{database}_#{current_time}.sql.bz2"
     end
@@ -76,22 +80,27 @@ module Database
       @config = YAML.load(ERB.new(@config).result)[@cap.rails_env.to_s]
     end
 
+    def last_dump
+      @cap.capture("cd #{@cap.shared_path} && cd #{Pathname.new(output_file).dirname} && ls -t *.sql.bz2|head -n1").strip
+    end
+
     def dump
-      @cap.run "cd #{@cap.current_path} && mkdir -p #{Pathname.new(output_file).dirname} && #{dump_cmd} | bzip2 - - > #{output_file}"
+      @cap.run "cd #{@cap.shared_path} && mkdir -p #{Pathname.new(output_file).dirname} && #{dump_cmd} | bzip2 - - > #{output_file}"
       self
     end
 
     def download(local_file = "#{output_file}")
-      remote_file = "#{@cap.current_path}/#{output_file}"
-      @cap.get remote_file, local_file
+      remote_file = "#{@cap.shared_path}/#{output_file}"
+      @cap.get remote_file, local_file, via: :scp
     end
 
-    # cleanup = true removes the mysqldump file after loading, false leaves it in db/
     def load(file, cleanup)
       unzip_file = File.join(File.dirname(file), File.basename(file, '.bz2'))
-      # @cap.run "cd #{@cap.current_path} && bunzip2 -f #{file} && RAILS_ENV=#{@cap.rails_env} bundle exec rake db:drop db:create && #{import_cmd(unzip_file)}"
-      @cap.run "cd #{@cap.current_path} && bunzip2 -f #{file} && RAILS_ENV=#{@cap.rails_env} && #{import_cmd(unzip_file)}"
-      @cap.run("cd #{@cap.current_path} && rm #{unzip_file}") if cleanup
+      @cap.run "cd #{@cap.shared_path} && bunzip2 -f #{file} && RAILS_ENV=#{@cap.rails_env} && #{import_cmd(unzip_file)}"
+     if cleanup
+       # remove all but the most recent dumpfile
+       @cap.run("cd #{@cap.shared_path} && cd #{Pathname.new(output_file).dirname} && (ls -t|head -n1;ls)|sort|uniq -u|xargs rm")
+     end
     end
   end
 
@@ -123,8 +132,8 @@ module Database
     end
 
     def upload
-      remote_file = "#{@cap.current_path}/#{output_file}"
-      @cap.upload output_file, remote_file
+      remote_file = "#{@cap.shared_path}/#{output_file}"
+      @cap.upload output_file, remote_file, via: :scp
     end
   end
 
@@ -142,7 +151,12 @@ module Database
 
       check(local_db, remote_db)
 
-      remote_db.dump.download
+      if instance.fetch(:new_dump) || remote_db.last_dump.nil?
+        remote_db.dump
+      else
+        remote_db.output_file = remote_db.last_dump
+      end
+      remote_db.download
       local_db.load(remote_db.output_file, instance.fetch(:db_local_clean))
     end
 

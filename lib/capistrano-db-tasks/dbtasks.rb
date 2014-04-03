@@ -9,12 +9,12 @@ if Capistrano::Configuration.instance(false)
     instance.set :local_rails_env, ENV['RAILS_ENV'] || 'development' unless exists?(:local_rails_env)
     instance.set :rails_env, 'production' unless exists?(:rails_env)
     instance.set :db_local_clean, false unless exists?(:db_local_clean)
+    instance.set :new_dump, false unless exists?(:new_dump)
     instance.set :assets_dir, 'system' unless exists?(:assets_dir)
     instance.set :local_assets_dir, 'public' unless exists?(:local_assets_dir)
 
     namespace :db do
       namespace :remote do
-        desc 'Synchronize your remote database using local database data'
         task :sync, :roles => :db do
           if Util.prompt 'Are you sure you want to REPLACE THE REMOTE DATABASE with local database'
             Database.local_to_remote(instance)
@@ -23,7 +23,6 @@ if Capistrano::Configuration.instance(false)
       end
 
       namespace :local do
-        desc 'Synchronize your local database using remote database data'
         task :sync, :roles => :db do
           puts "Local database: #{Database::Local.new(instance).database}"
           if Util.prompt 'Are you sure you want to erase your local database with server database'
@@ -32,7 +31,7 @@ if Capistrano::Configuration.instance(false)
         end
       end
 
-      desc 'Synchronize your local database using remote database data'
+      desc "Copy the target env's most recent db dump to this computer, use -snew_dump=true to get a fresh copy"
       task :pull do
         db.local.sync
       end
@@ -44,9 +43,9 @@ if Capistrano::Configuration.instance(false)
 
       desc 'Backup the remote database, use -spath=some/path to set the backup directory'
       task :backup, :roles => :db do
-        path = fetch(:path, 'shared/backups')
+        path = fetch(:path, 'db/backups')
         remote = Database::Remote.new(instance)
-        remote.output_file = Pathname.new(current_path).join(path, remote.output_filename)
+        remote.output_file = Pathname.new(shared_path).join(path, remote.output_filename)
         puts "Backing up database to #{remote.output_file}"
         remote.dump
       end
