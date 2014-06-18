@@ -163,6 +163,7 @@ module Database
     def remote_to_local(instance)
       local_db  = Database::Local.new(instance)
       remote_db = Database::Remote.new(instance)
+      raise "Refusing to drop the production database unless ENV['DISABLE_SAFETY_FEATURES'] is truthy" if fetch(:local_rails_env).to_s == 'production' && !ENV['DISABLE_SAFETY_FEATURES']
 
       check(local_db, remote_db)
 
