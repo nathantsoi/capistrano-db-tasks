@@ -14,12 +14,21 @@ module Database
     end
 
     def credentials
+      credential_params = ""
       if mysql?
         username = @config['username'] || @config['user']
-        (username ? " -u #{username} " : '') + (@config['password'] ? " -p'#{@config['password']}' " : '') + (@config['host'] ? " -h #{@config['host']}" : '') + (@config['socket'] ? " -S#{@config['socket']}" : '')
+        credential_params << " -u #{username} " if username
+        credential_params << " -p '#{@config['password']}' " if @config['password']
+        credential_params << " -h #{@config['host']} " if @config['host']
+        credential_params << " -S #{@config['socket']} " if @config['socket']
+        credential_params << " -P #{@config['port']} " if @config['port']
       elsif postgresql?
-        (@config['username'] ? " -U #{@config['username']} " : '') + (@config['host'] ? " -h #{@config['host']}" : '')
+        credential_params << " -U #{@config['username']} " if @config['username']
+        credential_params << " -h #{@config['host']} " if @config['host']
+        credential_params << " -p #{@config['port']} " if @config['port']
       end
+
+      credential_params
     end
 
     def database
@@ -42,29 +51,26 @@ module Database
       @output_filename ||= "#{database}_#{current_time}.sql.bz2"
     end
 
-    def db_environment
-      if mysql?
-        ''
-      elsif postgresql?
-        @config['password'] ? "PGPASSWORD='#{@config['password']}' " : ''
-      end
+    def pgpass
+      "PGPASSWORD='#{@config['password']}'" if @config['password']
     end
 
   private
 
     def dump_cmd
       if mysql?
-        "#{db_environment}mysqldump #{credentials} #{database} --lock-tables=false"
+        "mysqldump #{credentials} #{database} --lock-tables=false"
       elsif postgresql?
-        "#{db_environment}pg_dump #{credentials} -c -O #{database}"
+        "#{pgpass} pg_dump --no-acl --no-owner #{credentials} #{database}"
       end
     end
 
     def import_cmd(file)
       if mysql?
-        "#{db_environment}mysql #{credentials} -D #{database} < #{file}"
+        "mysql #{credentials} -D #{database} < #{file}"
       elsif postgresql?
-        "#{db_environment}psql #{credentials} #{database} < #{file}"
+        terminate_connection_sql = "SELECT pg_terminate_backend(pg_stat_activity.pid) FROM pg_stat_activity WHERE pg_stat_activity.datname = '#{database}' AND pid <> pg_backend_pid();"
+        "#{pgpass} psql -c \"#{terminate_connection_sql};\" #{credentials}; #{pgpass} dropdb #{credentials} #{database}; #{pgpass} createdb #{credentials} #{database}; #{pgpass} psql #{credentials} -d #{database} < #{file}"
       end
     end
 
@@ -73,11 +79,8 @@ module Database
   class Remote < Base
     def initialize(cap_instance)
       super(cap_instance)
-      @config = ""
-      @cap.run("cat #{@cap.current_path}/config/database.yml") do |c, s, d|
-        @config += d
-      end
-      @config = YAML.load(ERB.new(@config).result)[@cap.rails_env.to_s]
+      @config = @cap.capture("cat #{@cap.current_path}/config/database.yml")
+      @config = YAML.load(ERB.new(@config).result)[@cap.fetch(:rails_env).to_s]
     end
 
     def last_dump
@@ -85,29 +88,41 @@ module Database
     end
 
     def dump
-      @cap.run "cd #{@cap.shared_path} && mkdir -p #{Pathname.new(output_file).dirname} && #{dump_cmd} | bzip2 - - > #{output_file}"
+      @cap.execute "cd #{@cap.shared_path} && #{dump_cmd} | bzip2 - - > #{output_file}"
       self
     end
 
     def download(local_file = "#{output_file}")
       remote_file = "#{@cap.shared_path}/#{output_file}"
-      @cap.get remote_file, local_file, via: :scp
+      @cap.get dump_file_path, local_file, via: :scp
+    end
+
+    def clean_dump_if_needed
+      if @cap.fetch(:db_remote_clean)
+        @cap.execute "rm -f #{dump_file_path}"
+      else
+        @cap.info "leaving #{dump_file_path} on the server (add \"set :db_remote_clean, true\" to deploy.rb to remove)"
+      end
     end
 
     def load(file, cleanup)
       unzip_file = File.join(File.dirname(file), File.basename(file, '.bz2'))
-      @cap.run "cd #{@cap.shared_path} && bunzip2 -f #{file} && RAILS_ENV=#{@cap.rails_env} && #{import_cmd(unzip_file)}"
-     if cleanup
-       # remove all but the most recent dumpfile
-       @cap.run("cd #{@cap.shared_path} && cd #{Pathname.new(output_file).dirname} && (ls -t|head -n1;ls)|sort|uniq -u|xargs rm")
-     end
+      # @cap.run "cd #{@cap.current_path} && bunzip2 -f #{file} && RAILS_ENV=#{@cap.rails_env} bundle exec rake db:drop db:create && #{import_cmd(unzip_file)}"
+      @cap.execute "cd #{@cap.shared_path} && bunzip2 -f #{file} && RAILS_ENV=#{@cap.fetch(:rails_env)} && #{import_cmd(unzip_file)}"
+      @cap.execute("cd #{@cap.shared_path} && rm #{unzip_file}") if cleanup
+    end
+
+    private
+
+    def dump_file_path
+      "#{@cap.shared_path}/#{output_file}"
     end
   end
 
   class Local < Base
     def initialize(cap_instance)
       super(cap_instance)
-      @config = YAML.load(ERB.new(File.read(File.join('config', 'database.yml'))).result)[@cap.local_rails_env.to_s]
+      @config = YAML.load(ERB.new(File.read(File.join('config', 'database.yml'))).result)[fetch(:local_rails_env).to_s]
       puts "local #{@config}"
     end
 
@@ -115,15 +130,15 @@ module Database
     def load(file, cleanup)
       unzip_file = File.join(File.dirname(file), File.basename(file, '.bz2'))
       # system("bunzip2 -f #{file} && bundle exec rake db:drop db:create && #{import_cmd(unzip_file)} && bundle exec rake db:migrate")
-      @cap.logger.info("executing local: bunzip2 -f #{file} && #{import_cmd(unzip_file)}")
+      @cap.info "executing local: bunzip2 -f #{file} && #{import_cmd(unzip_file)}"
       system("bunzip2 -f #{file} && #{import_cmd(unzip_file)}")
       if cleanup
-        @cap.logger.info("removing #{unzip_file}")
+        @cap.info "removing #{unzip_file}"
         File.unlink(unzip_file)
       else
-        @cap.logger.info("leaving #{unzip_file} (specify :db_local_clean in deploy.rb to remove)")
+        @cap.info "leaving #{unzip_file} (specify :db_local_clean in deploy.rb to remove)"
       end
-      @cap.logger.info("Completed database import")
+      @cap.info "Completed database import"
     end
 
     def dump
@@ -151,12 +166,16 @@ module Database
 
       check(local_db, remote_db)
 
-      if instance.fetch(:new_dump) || remote_db.last_dump.nil?
-        remote_db.dump
-      else
-        remote_db.output_file = remote_db.last_dump
+      begin
+        if instance.fetch(:new_dump) || remote_db.last_dump.nil?
+          remote_db.dump
+        else
+          remote_db.output_file = remote_db.last_dump
+        end
+        remote_db.dump.download
+      ensure
+        remote_db.clean_dump_if_needed
       end
-      remote_db.download
       local_db.load(remote_db.output_file, instance.fetch(:db_local_clean))
     end
 
