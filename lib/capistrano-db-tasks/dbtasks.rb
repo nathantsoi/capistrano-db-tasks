@@ -29,7 +29,7 @@ namespace :db do
           raise 'Dumping and restoring to the same env would be unproductive' if args[:source] == fetch(:local_rails_env)
           within release_path do
             with rails_env: fetch(:rails_env) do
-              execute :cap, "#{args[:source]} db:local:sync"
+              execute :cap, "SKIP_DATA_SYNC_CONFIRM=true #{args[:source]} db:local:sync"
             end
           end
         else
