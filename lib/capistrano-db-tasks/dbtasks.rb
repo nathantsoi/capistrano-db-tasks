@@ -53,11 +53,13 @@ namespace :db do
   desc 'Backup the remote database, use -spath=some/path to set the backup directory'
   task :backup do
     on roles(:db) do
-      path = fetch(:path, 'db/backups')
-      remote = Database::Remote.new(instance)
-      remote.output_file = Pathname.new(shared_path).join(path, remote.output_filename)
-      puts "Backing up database to #{remote.output_file}"
-      remote.dump
+      backups_path = shared_path.join(fetch(:path, 'db/backups'))
+      execute :mkdir, '-p', backups_path
+      within backups_path do
+        remote = Database::Remote.new(self)
+        puts "Backing up database to #{remote.output_file}"
+        remote.dump
+      end
     end
   end
 
