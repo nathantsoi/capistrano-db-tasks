@@ -68,6 +68,20 @@ Example
     cap db:pull
     cap production db:pull # if you are using capistrano-ext to have multistages
 
+* update production -> staging
+```
+cap staging db:pull\[production\]
+```
+
+* update staging -> dev (local)
+```
+cap staging db:pull
+```
+
+* update production -> dev (local)
+```
+cap production db:pull
+```
 
 Contributors
 ============

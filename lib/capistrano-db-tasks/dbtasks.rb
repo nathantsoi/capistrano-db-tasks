@@ -23,18 +23,29 @@ namespace :db do
 
   namespace :local do
     desc 'Synchronize your local database using remote database data'
-    task :sync do
+    task :sync, :source do |t, args|
       on roles(:db) do
-        puts "Local database: #{Database::Local.new(self).database}"
-        if fetch(:skip_data_sync_confirm) || Util.prompt('Are you sure you want to erase your local database with server database')
-          Database.remote_to_local(self)
+        unless args[:source].nil?
+          raise 'Dumping and restoring to the same env would be unproductive' if args[:source] == fetch(:local_rails_env)
+          within release_path do
+            with rails_env: fetch(:rails_env) do
+              execute :cap, "#{args[:source]} db:local:sync"
+            end
+          end
+        else
+          puts "Local database: #{Database::Local.new(self).database}, Remote database: #{Database::Remote.new(self).database}"
+          if fetch(:skip_data_sync_confirm) || Util.prompt('Are you sure you want to erase your local database with server database')
+            Database.remote_to_local(self)
+          end
         end
       end
     end
   end
 
   desc 'Synchronize your local database using remote database data'
-  task :pull => "db:local:sync"
+  task :pull, :source do |t, args|
+    invoke "db:local:sync", args[:source]
+  end
 
   desc 'Synchronize your remote database using local database data'
   task :push => "db:remote:sync"
@@ -49,6 +60,7 @@ namespace :db do
       remote.dump
     end
   end
+
 end
 
 namespace :assets do
