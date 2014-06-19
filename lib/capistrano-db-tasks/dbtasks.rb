@@ -40,12 +40,14 @@ namespace :db do
   task :push => "db:remote:sync"
 
   desc 'Backup the remote database, use -spath=some/path to set the backup directory'
-  task :backup, :roles => :db do
-    path = fetch(:path, 'db/backups')
-    remote = Database::Remote.new(instance)
-    remote.output_file = Pathname.new(shared_path).join(path, remote.output_filename)
-    puts "Backing up database to #{remote.output_file}"
-    remote.dump
+  task :backup do
+    on roles(:db) do
+      path = fetch(:path, 'db/backups')
+      remote = Database::Remote.new(instance)
+      remote.output_file = Pathname.new(shared_path).join(path, remote.output_filename)
+      puts "Backing up database to #{remote.output_file}"
+      remote.dump
+    end
   end
 end
 
