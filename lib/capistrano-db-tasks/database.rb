@@ -94,7 +94,7 @@ module Database
 
     def download(local_file = "#{output_file}")
       remote_file = "#{@cap.shared_path}/#{output_file}"
-      @cap.get dump_file_path, local_file, via: :scp
+      @cap.download! dump_file_path, local_file
     end
 
     def clean_dump_if_needed
@@ -148,7 +148,7 @@ module Database
 
     def upload
       remote_file = "#{@cap.shared_path}/#{output_file}"
-      @cap.upload output_file, remote_file, via: :scp
+      @cap.upload! output_file, remote_file
     end
   end
 
