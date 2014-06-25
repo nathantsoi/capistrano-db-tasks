@@ -14,7 +14,7 @@ namespace :db do
   namespace :remote do
     desc 'Synchronize your remote database using local database data'
     task :sync do
-      on roles(:db) do
+      on primary(:db) do
         if fetch(:skip_data_sync_confirm) || Util.prompt('Are you sure you want to REPLACE THE REMOTE DATABASE with local database')
           Database.local_to_remote(self)
         end
@@ -25,7 +25,7 @@ namespace :db do
   namespace :local do
     desc 'Synchronize your local database using remote database data'
     task :sync, :source do |t, args|
-      on roles(:db) do
+      on primary(:db) do
         unless args[:source].nil?
           raise 'Dumping and restoring to the same env would be unproductive' if args[:source] == fetch(:local_rails_env)
           within release_path do
@@ -53,7 +53,7 @@ namespace :db do
 
   desc 'Backup the remote database, use -spath=some/path to set the backup directory'
   task :backup do
-    on roles(:db) do
+    on primary(:db) do
       backups_path = shared_path.join(fetch(:path, 'db/backups'))
       execute :mkdir, '-p', backups_path
       within backups_path do
