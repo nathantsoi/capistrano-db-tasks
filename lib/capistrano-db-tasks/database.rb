@@ -84,7 +84,7 @@ module Database
     end
 
     def last_dump
-      @cap.capture("cd #{@cap.shared_path} && cd #{Pathname.new(output_file).dirname} && ls -t *.sql.bz2|head -n1").strip
+      @cap.capture("cd #{@cap.shared_path.join(Pathname.new(output_file).dirname)} && ls -t *.sql.bz2|head -n1").strip
     end
 
     def dump
@@ -173,7 +173,7 @@ module Database
         else
           remote_db.output_file = remote_db.last_dump
         end
-        remote_db.dump.download
+        remote_db.download
       ensure
         remote_db.clean_dump_if_needed
       end
