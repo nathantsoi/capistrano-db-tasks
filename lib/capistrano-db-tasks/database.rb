@@ -61,7 +61,7 @@ module Database
       if mysql?
         "mysqldump #{credentials} #{database} --lock-tables=false"
       elsif postgresql?
-        "#{pgpass} pg_dump --no-acl --no-owner #{credentials} #{database}"
+        "#{pgpass} pg_dump #{ENV['SCHEMA_FLAG']||'--schema=public'} --no-acl --no-owner #{credentials} #{database}"
       end
     end
 
