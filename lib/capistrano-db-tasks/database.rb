@@ -84,11 +84,11 @@ module Database
     end
 
     def last_dump
-      @cap.capture("cd #{@cap.shared_path.join(Pathname.new(output_file).dirname)} && ls -t *.sql.bz2|head -n1").strip rescue nil
+      @cap.capture("cd #{output_dir} && ls -t *.sql.bz2|head -n1").strip rescue nil
     end
 
     def dump
-      @cap.execute "cd #{@cap.shared_path} && #{dump_cmd} | bzip2 - - > #{output_file}"
+      @cap.execute "mkdir -p #{dump_file_dir} && #{dump_cmd} | bzip2 - - > #{dump_file_path}"
       self
     end
 
@@ -115,8 +115,13 @@ module Database
     private
 
     def dump_file_path
-      "#{@cap.shared_path}/#{output_file}"
+      @cap.shared_path.join(Pathname.new(output_file))
     end
+
+    def dump_file_dir
+      dump_file_path.dirname
+    end
+
   end
 
   class Local < Base
