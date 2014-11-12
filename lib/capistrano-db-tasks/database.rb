@@ -84,7 +84,7 @@ module Database
     end
 
     def last_dump
-      @cap.capture("cd #{@cap.shared_path.join(Pathname.new(output_file).dirname)} && ls -t *.sql.bz2|head -n1").strip
+      @cap.capture("cd #{@cap.shared_path.join(Pathname.new(output_file).dirname)} && ls -t *.sql.bz2|head -n1").strip rescue nil
     end
 
     def dump
