@@ -43,6 +43,14 @@ namespace :db do
     end
   end
 
+  desc 'Check if there is an existing dump'
+  task :last_dump, :source do |t, args|
+    on primary(:db) do
+      remote = Database::Remote.new(self)
+      puts remote.last_dump
+    end
+  end
+
   desc 'Synchronize your local database using remote database data'
   task :pull, :source do |t, args|
     invoke "db:local:sync", args[:source]
