@@ -84,16 +84,15 @@ module Database
     end
 
     def last_dump
-      @cap.capture("ls -t #{dump_file_dir.join('*.sql.bz2')}|head -n1").strip
+      @cap.capture("ls -t #{@cap.shared_path.join(Pathname.new(output_file).dirname).join('*.sql.bz2')}|head -n1").strip.split('db')[-1]
     end
 
     def dump
-      @cap.execute "mkdir -p #{dump_file_dir} && #{dump_cmd} | bzip2 - - > #{dump_file_path}"
+      @cap.execute "mkdir -p #{@cap.shared_path} && #{dump_cmd} | bzip2 - - > #{output_file}"
       self
     end
 
     def download(local_file = "#{output_file}")
-      remote_file = "#{@cap.shared_path}/#{output_file}"
       @cap.download! dump_file_path, local_file
     end
 
@@ -116,10 +115,6 @@ module Database
 
     def dump_file_path
       @cap.shared_path.join(Pathname.new(output_file))
-    end
-
-    def dump_file_dir
-      dump_file_path.dirname
     end
 
   end
