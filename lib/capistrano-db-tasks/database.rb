@@ -44,7 +44,16 @@ module Database
     end
 
     def output_file= attr
-      @output_file = "db/#{attr}"
+      @output_file = (attr[0] == '/' ? "db/#{attr.split('db/')[-1]}" : "db/#{attr}")
+    end
+
+    def output_file_dir
+      Pathname.new(output_file_path).dirname
+    end
+
+    def output_file_path
+      puts "#{@cap.shared_path} #{output_file}"
+      output_file[0] == '/' ? output_file : @cap.shared_path.join(output_file)
     end
 
     def output_filename
@@ -84,23 +93,23 @@ module Database
     end
 
     def last_dump
-      @cap.capture("ls -t #{@cap.shared_path.join(Pathname.new(output_file).dirname).join('*.sql.bz2')}|head -n1").strip.split('db')[-1]
+      @cap.capture("ls -t #{output_file_dir.join('*.sql.bz2')}|head -n1")
     end
 
     def dump
-      @cap.execute "mkdir -p #{@cap.shared_path} && #{dump_cmd} | bzip2 - - > #{output_file}"
+      @cap.execute "mkdir -p #{output_file_dir} && #{dump_cmd} | bzip2 - - > #{output_file_path}"
       self
     end
 
     def download(local_file = "#{output_file}")
-      @cap.download! dump_file_path, local_file
+      @cap.download! output_file_path, local_file
     end
 
     def clean_dump_if_needed
       if @cap.fetch(:db_remote_clean)
-        @cap.execute "rm -f #{dump_file_path}"
+        @cap.execute "rm -f #{output_file_path}"
       else
-        @cap.info "leaving #{dump_file_path} on the server (add \"set :db_remote_clean, true\" to deploy.rb to remove)"
+        @cap.info "leaving #{output_file_path} on the server (add \"set :db_remote_clean, true\" to deploy.rb to remove)"
       end
     end
 
@@ -109,12 +118,6 @@ module Database
       # @cap.run "cd #{@cap.current_path} && bunzip2 -f #{file} && RAILS_ENV=#{@cap.rails_env} bundle exec rake db:drop db:create && #{import_cmd(unzip_file)}"
       @cap.execute "cd #{@cap.shared_path} && bunzip2 -f #{file} && RAILS_ENV=#{@cap.fetch(:rails_env)} && #{import_cmd(unzip_file)}"
       @cap.execute("cd #{@cap.shared_path} && rm #{unzip_file}") if cleanup
-    end
-
-    private
-
-    def dump_file_path
-      @cap.shared_path.join(Pathname.new(output_file))
     end
 
   end
@@ -142,13 +145,12 @@ module Database
     end
 
     def dump
-      system "mkdir -p #{Pathname.new(output_file).dirname} && #{dump_cmd} | bzip2 - - > #{output_file}"
+      system "mkdir -p #{output_file_dir} && #{dump_cmd} | bzip2 - - > #{output_file_path}"
       self
     end
 
     def upload
-      remote_file = "#{@cap.shared_path}/#{output_file}"
-      @cap.upload! output_file, remote_file
+      @cap.upload! output_file, output_file_path
     end
   end
 
